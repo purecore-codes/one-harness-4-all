@@ -1,0 +1,577 @@
+{
+  "agentId": "550e8400-e29b-41d4-a716-446655440000",
+  "name": "Customer Support Bot",
+  "description": "WhatsApp agent for customer support with AI and rule-based responses",
+  "version": "1.0.0",
+  "enabled": true,
+  
+  "whatsapp": {
+    "provider": "meta-cloud-api",
+    "phoneNumberId": "${WHATSAPP_PHONE_ID}",
+    "businessAccountId": "${WHATSAPP_BUSINESS_ID}",
+    "webhookUrl": "https://api.example.com/webhook/whatsapp",
+    "webhookVerifyToken": "${WHATSAPP_VERIFY_TOKEN}"
+  },
+  
+  "session": {
+    "enabled": true,
+    "ttl": 3600,
+    "storage": "redis",
+    "keyPrefix": "whatsapp:session:"
+  },
+  
+  "rateLimit": {
+    "enabled": true,
+    "windowMs": 60000,
+    "maxMessages": 20,
+    "bySender": true,
+    "blockDuration": 300000
+  },
+  
+  "rules": [
+    {
+      "id": "greeting-rule",
+      "name": "Greeting Handler",
+      "description": "Respond to greetings with a friendly message",
+      "priority": 100,
+      "enabled": true,
+      "condition": {
+        "field": "text.body",
+        "operator": "regex",
+        "pattern": "^(hi|hello|hey|olá|bom dia|boa tarde|boa noite|good morning|good afternoon|good evening)",
+        "caseSensitive": false
+      },
+      "actions": [
+        {
+          "type": "typing_indicator",
+          "duration": 1000
+        },
+        {
+          "type": "reply_text",
+          "response": {
+            "type": "text",
+            "content": "Olá! 👋 Bem-vindo ao nosso atendimento. Como posso ajudar você hoje?",
+            "parseMarkdown": true
+          }
+        }
+      ]
+    },
+    
+    {
+      "id": "hours-rule",
+      "name": "Business Hours Inquiry",
+      "description": "Provide business hours information",
+      "priority": 90,
+      "enabled": true,
+      "condition": {
+        "logicalOperator": "OR",
+        "conditions": [
+          {
+            "field": "text.body",
+            "operator": "contains",
+            "value": "horário"
+          },
+          {
+            "field": "text.body",
+            "operator": "contains",
+            "value": "funciona"
+          },
+          {
+            "field": "text.body",
+            "operator": "regex",
+            "pattern": "(aberto|fechado|horas)"
+          }
+        ]
+      },
+      "actions": [
+        {
+          "type": "reply_text",
+          "response": {
+            "type": "text",
+            "content": "🕐 *Nosso Horário de Atendimento:*\n\nSegunda a Sexta: 8h às 18h\nSábado: 8h às 12h\nDomingo: Fechado\n\nComo posso ajudar?",
+            "parseMarkdown": true
+          }
+        }
+      ]
+    },
+    
+    {
+      "id": "support-menu-rule",
+      "name": "Support Menu",
+      "description": "Show support options menu",
+      "priority": 80,
+      "enabled": true,
+      "condition": {
+        "logicalOperator": "OR",
+        "conditions": [
+          {
+            "field": "text.body",
+            "operator": "equals",
+            "value": "menu"
+          },
+          {
+            "field": "text.body",
+            "operator": "equals",
+            "value": "opções"
+          },
+          {
+            "field": "text.body",
+            "operator": "contains",
+            "value": "ajuda"
+          }
+        ]
+      },
+      "actions": [
+        {
+          "type": "send_buttons",
+          "response": {
+            "type": "buttons",
+            "body": "Escolha uma opção abaixo para continuar:",
+            "footer": "Estamos aqui para ajudar!",
+            "buttons": [
+              {
+                "id": "btn_support",
+                "title": "Suporte Técnico",
+                "type": "reply"
+              },
+              {
+                "id": "btn_sales",
+                "title": "Vendas",
+                "type": "reply"
+              },
+              {
+                "id": "btn_financeiro",
+                "title": "Financeiro",
+                "type": "reply"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    
+    {
+      "id": "technical-support-rule",
+      "name": "Technical Support",
+      "description": "Handle technical support requests",
+      "priority": 85,
+      "enabled": true,
+      "condition": {
+        "logicalOperator": "OR",
+        "conditions": [
+          {
+            "field": "button.payload",
+            "operator": "equals",
+            "value": "btn_support"
+          },
+          {
+            "field": "text.body",
+            "operator": "contains",
+            "value": "problema"
+          },
+          {
+            "field": "text.body",
+            "operator": "contains",
+            "value": "erro"
+          },
+          {
+            "field": "text.body",
+            "operator": "contains",
+            "value": "não funciona"
+          }
+        ]
+      },
+      "actions": [
+        {
+          "type": "call_function",
+          "functionName": "createSupportTicket",
+          "arguments": {
+            "category": "technical",
+            "priority": "normal"
+          },
+          "storeResult": true,
+          "resultVariable": "ticketId"
+        },
+        {
+          "type": "reply_text",
+          "response": {
+            "type": "text",
+            "content": "🎫 *Chamado Aberto*\n\nSeu número de chamado é: {{ticketId}}\n\nUm de nossos técnicos entrará em contato em breve.\n\nPosso ajudar com mais alguma coisa?",
+            "parseMarkdown": true
+          }
+        }
+      ]
+    },
+    
+    {
+      "id": "location-rule",
+      "name": "Location Request",
+      "description": "Handle location sharing",
+      "priority": 70,
+      "enabled": true,
+      "condition": {
+        "field": "type",
+        "operator": "equals",
+        "value": "location"
+      },
+      "actions": [
+        {
+          "type": "call_function",
+          "functionName": "findNearestStore",
+          "arguments": {
+            "latitude": "{{location.latitude}}",
+            "longitude": "{{location.longitude}}"
+          },
+          "storeResult": true,
+          "resultVariable": "nearestStore"
+        },
+        {
+          "type": "reply_text",
+          "response": {
+            "type": "text",
+            "content": "📍 A loja mais próxima de você é:\n\n*{{nearestStore.name}}*\n📝 {{nearestStore.address}}\n📞 {{nearestStore.phone}}\n\nDeseja mais informações?",
+            "parseMarkdown": true
+          }
+        }
+      ]
+    },
+    
+    {
+      "id": "escalate-human-rule",
+      "name": "Escalate to Human",
+      "description": "Transfer conversation to human agent",
+      "priority": 200,
+      "enabled": true,
+      "condition": {
+        "logicalOperator": "OR",
+        "conditions": [
+          {
+            "field": "text.body",
+            "operator": "contains",
+            "value": "falar com atendente"
+          },
+          {
+            "field": "text.body",
+            "operator": "contains",
+            "value": "falar com humano"
+          },
+          {
+            "field": "text.body",
+            "operator": "regex",
+            "pattern": "(atendente|humano|real)"
+          }
+        ]
+      },
+      "actions": [
+        {
+          "type": "call_function",
+          "functionName": "escalateToHuman",
+          "arguments": {
+            "reason": "user_request"
+          }
+        },
+        {
+          "type": "reply_text",
+          "response": {
+            "type": "text",
+            "content": "👤 Vou transferir você para um de nossos atendentes humanos.\n\nPor favor, aguarde um momento. O tempo médio de espera é de 2 minutos.",
+            "parseMarkdown": true
+          }
+        },
+        {
+          "type": "presence_update",
+          "presence": "available"
+        }
+      ]
+    }
+  ],
+  
+  "flows": [
+    {
+      "id": "onboarding-flow",
+      "name": "New User Onboarding",
+      "description": "Guide new users through initial setup",
+      "initialState": "welcome",
+      "states": [
+        {
+          "id": "welcome",
+          "name": "Welcome State",
+          "description": "Initial welcome message",
+          "defaultActions": [
+            {
+              "type": "reply_text",
+              "response": {
+                "type": "text",
+                "content": "Bem-vindo! 🎉\n\nVamos configurar sua conta rapidamente.\n\nQual é o seu nome?"
+              }
+            }
+          ],
+          "timeout": 300000,
+          "onTimeout": [
+            {
+              "type": "reply_text",
+              "response": {
+                "type": "text",
+                "content": "Oi! Ainda está aí? Quando puder, me diga seu nome para continuarmos."
+              }
+            }
+          ]
+        },
+        {
+          "id": "collect-name",
+          "name": "Collect Name",
+          "description": "Collect user's name",
+          "entryCondition": {
+            "field": "conversation.currentState",
+            "operator": "equals",
+            "value": "welcome"
+          },
+          "defaultActions": [
+            {
+              "type": "call_function",
+              "functionName": "saveUserName",
+              "arguments": {
+                "name": "{{text.body}}"
+              }
+            },
+            {
+              "type": "reply_text",
+              "response": {
+                "type": "text",
+                "content": "Prazer, {{userName}}! 😊\n\nAgora, qual é o seu e-mail?"
+              }
+            }
+          ]
+        },
+        {
+          "id": "collect-email",
+          "name": "Collect Email",
+          "description": "Collect user's email",
+          "defaultActions": [
+            {
+              "type": "call_function",
+              "functionName": "saveUserEmail",
+              "arguments": {
+                "email": "{{text.body}}"
+              }
+            },
+            {
+              "type": "reply_text",
+              "response": {
+                "type": "text",
+                "content": "Perfeito! ✅\n\nSua conta está configurada.\n\nO que deseja fazer agora?\n\n1️⃣ Ver produtos\n2️⃣ Fazer pedido\n3️⃣ Falar com atendente"
+              }
+            }
+          ]
+        }
+      ],
+      "transitions": [
+        {
+          "fromState": "welcome",
+          "toState": "collect-name",
+          "condition": {
+            "field": "text.body",
+            "operator": "exists",
+            "value": true
+          }
+        },
+        {
+          "fromState": "collect-name",
+          "toState": "collect-email",
+          "condition": {
+            "field": "conversation.variables.name",
+            "operator": "exists"
+          }
+        },
+        {
+          "fromState": "collect-email",
+          "toState": "completed",
+          "condition": {
+            "field": "conversation.variables.email",
+            "operator": "exists"
+          }
+        }
+      ]
+    }
+  ],
+  
+  "functions": [
+    {
+      "name": "createSupportTicket",
+      "description": "Create a new support ticket in the system",
+      "handler": "./handlers/support/createTicket.ts",
+      "parameters": [
+        {
+          "name": "category",
+          "type": "string",
+          "required": true,
+          "description": "Ticket category (technical, sales, billing)"
+        },
+        {
+          "name": "priority",
+          "type": "string",
+          "required": false,
+          "defaultValue": "normal",
+          "description": "Ticket priority (low, normal, high, urgent)"
+        }
+      ],
+      "timeout": 5000,
+      "retryCount": 2,
+      "cacheResult": false
+    },
+    {
+      "name": "findNearestStore",
+      "description": "Find the nearest store based on coordinates",
+      "handler": "./handlers/stores/findNearest.ts",
+      "parameters": [
+        {
+          "name": "latitude",
+          "type": "number",
+          "required": true,
+          "description": "User's latitude"
+        },
+        {
+          "name": "longitude",
+          "type": "number",
+          "required": true,
+          "description": "User's longitude"
+        }
+      ],
+      "timeout": 3000,
+      "cacheResult": true,
+      "cacheTTL": 3600
+    },
+    {
+      "name": "escalateToHuman",
+      "description": "Transfer conversation to a human agent",
+      "handler": "./handlers/escalation/transferToHuman.ts",
+      "parameters": [
+        {
+          "name": "reason",
+          "type": "string",
+          "required": true,
+          "description": "Reason for escalation"
+        },
+        {
+          "name": "priority",
+          "type": "string",
+          "required": false,
+          "defaultValue": "normal",
+          "description": "Escalation priority"
+        }
+      ],
+      "timeout": 10000,
+      "retryCount": 1,
+      "cacheResult": false
+    },
+    {
+      "name": "saveUserName",
+      "description": "Save user's name to profile",
+      "handler": "./handlers/user/saveName.ts",
+      "parameters": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "description": "User's full name"
+        }
+      ],
+      "timeout": 2000,
+      "cacheResult": false
+    },
+    {
+      "name": "saveUserEmail",
+      "description": "Save user's email to profile",
+      "handler": "./handlers/user/saveEmail.ts",
+      "parameters": [
+        {
+          "name": "email",
+          "type": "string",
+          "required": true,
+          "validation": "^[\\w-\\.]+@([\\w-]+\\.)+[\\w-]{2,4}$",
+          "description": "User's email address"
+        }
+      ],
+      "timeout": 2000,
+      "cacheResult": false
+    }
+  ],
+  
+  "ai": {
+    "enabled": true,
+    "provider": "openai",
+    "model": "gpt-4-turbo-preview",
+    "temperature": 0.7,
+    "maxTokens": 500,
+    "systemPrompt": "Você é um assistente de atendimento ao cliente prestativo e amigável. Responda em português do Brasil de forma clara e concisa. Sempre seja educado e tente resolver o problema do cliente.",
+    "contextWindow": 10,
+    "fallbackToRules": true
+  },
+  
+  "analytics": {
+    "enabled": true,
+    "trackMessages": true,
+    "trackConversations": true,
+    "trackUserBehavior": true,
+    "customEvents": [
+      "ticket_created",
+      "escalation_requested",
+      "purchase_completed",
+      "feedback_submitted"
+    ],
+    "retentionDays": 90
+  },
+  
+  "defaultResponses": {
+    "unmatched": [
+      {
+        "type": "text",
+        "content": "Desculpe, não entendi sua mensagem. 😅\n\nPode reformular ou escolher uma das opções abaixo?",
+        "parseMarkdown": true
+      },
+      {
+        "type": "buttons",
+        "body": "Como posso ajudar?",
+        "buttons": [
+          {
+            "id": "btn_help",
+            "title": "Ajuda",
+            "type": "reply"
+          },
+          {
+            "id": "btn_human",
+            "title": "Falar com Atendente",
+            "type": "reply"
+          }
+        ]
+      }
+    ],
+    "error": [
+      {
+        "type": "text",
+        "content": "Ops! Algo deu errado. 🙈\n\nVou transferir você para um atendente humano que poderá ajudar melhor."
+      }
+    ],
+    "rateLimited": [
+      {
+        "type": "text",
+        "content": "⏳ Estamos processando muitas mensagens no momento. Por favor, aguarde alguns instantes antes de enviar outra mensagem."
+      }
+    ],
+    "sessionExpired": [
+      {
+        "type": "text",
+        "content": "Sua sessão expirou por inatividade. Vamos começar novamente?\n\nOlá! Como posso ajudar você hoje?"
+      }
+    ]
+  },
+  
+  "metadata": {
+    "environment": "production",
+    "team": "customer-success",
+    "owner": "support-team@example.com",
+    "tags": ["support", "customer-service", "brazil"],
+    "createdAt": "2024-01-15T10:00:00Z",
+    "updatedAt": "2024-01-15T10:00:00Z"
+  }
+}
